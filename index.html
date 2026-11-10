@@ -114,6 +114,22 @@
       return Math.max(0, Math.min(100, n));
     };
 
+    const escapeHTML = (value) => String(value).replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[char]);
+
+    const csvCell = (value) => {
+      let text = String(value ?? "");
+      if (/^[\s\u0000-\u001f]*[=+\-@]/.test(text)) {
+        text = `'${text}`;
+      }
+      return `"${text.replace(/"/g, '""')}"`;
+    };
+
     // DOM elements
     const subjectNameEl = document.getElementById("subjectName");
     const addSubjectBtn = document.getElementById("addSubjectBtn");
@@ -132,9 +148,8 @@
 
     // Render subjects list and table header
     function renderSubjects() {
-      subjectsListEl.innerHTML = subjects.map(s => `<li>${s}</li>`).join("");
-      studentsTableHead.innerHTML = `<th>Student</th>` + subjects.map(s => `<th>${s}</th>`).join("") + `<th>Total</th><th>%</th><th>Grade</th>`;
-      // Ensure each student has keys for new subjects
+      subjectsListEl.innerHTML = subjects.map(s => `<li>${escapeHTML(s)}</li>`).join("");
+      studentsTableHead.innerHTML = `<th>Student</th>` + subjects.map(s => `<th>${escapeHTML(s)}</th>`).join("") + `<th>Total</th><th>%</th><th>Grade</th>`;
       students.forEach(stu => {
         subjects.forEach(s => {
           if (!(s in stu.marks)) stu.marks[s] = "";
@@ -149,22 +164,21 @@
         const total = subjects.reduce((acc, s) => acc + (Number(stu.marks[s]) || 0), 0);
         const percent = subjects.length ? (total / (subjects.length * 100)) * 100 : 0;
         const g = grade(percent);
-        const markInputs = subjects.map((s, colIdx) => {
+        const markInputs = subjects.map((s) => {
           const val = stu.marks[s] ?? "";
           return `<td>
-            <input size="4" value="${val}" 
-              data-row="${rowIdx}" data-subject="${s}" class="mark-input" placeholder="0-100"/>
+            <input size="4" value="${escapeHTML(val)}" data-row="${rowIdx}" data-subject="${escapeHTML(s)}" class="mark-input" placeholder="0-100"/>
           </td>`;
         }).join("");
         return `<tr>
-          <td>${stu.name}</td>
+          <td>${escapeHTML(stu.name)}</td>
           ${markInputs}
           <td>${total.toFixed(0)}</td>
           <td>${percent.toFixed(1)}</td>
           <td>${g}</td>
         </tr>`;
       }).join("");
-      // Attach input listeners
+
       document.querySelectorAll(".mark-input").forEach(inp => {
         inp.addEventListener("change", (e) => {
           const row = Number(e.target.dataset.row);
@@ -197,12 +211,10 @@
       const topper = perStudent.reduce((a, b) => (b.total > a.total ? b : a));
       const classAvgPercent = perStudent.reduce((acc, s) => acc + s.percent, 0) / perStudent.length;
 
-      // Grade distribution
       const dist = {};
       ["A+", "A", "B+", "B", "C", "D", "F"].forEach(g => dist[g] = 0);
       perStudent.forEach(s => dist[s.grade]++);
 
-      // Subject-wise averages and toppers
       const subjectStats = subjects.map(s => {
         const marks = students.map(stu => Number(stu.marks[s]) || 0);
         const avg = marks.reduce((a, b) => a + b, 0) / marks.length;
@@ -214,11 +226,10 @@
         return { subject: s, average: avg, topper: topName, topMark };
       });
 
-      // Render
       const gradeDistHtml = Object.entries(dist).map(([g, c]) => `<li>${g}: ${c}</li>`).join("");
-      const subjHtml = subjectStats.map(ss => `<li>${ss.subject}: avg ${ss.average.toFixed(1)} | topper ${ss.topper} (${ss.topMark})</li>`).join("");
+      const subjHtml = subjectStats.map(ss => `<li>${escapeHTML(ss.subject)}: avg ${ss.average.toFixed(1)} | topper ${escapeHTML(ss.topper)} (${ss.topMark})</li>`).join("");
       summariesEl.innerHTML = `
-        <p><strong>Topper:</strong> ${topper.name} (Total ${topper.total.toFixed(0)}, ${topper.percent.toFixed(1)}%, Grade ${topper.grade})</p>
+        <p><strong>Topper:</strong> ${escapeHTML(topper.name)} (Total ${topper.total.toFixed(0)}, ${topper.percent.toFixed(1)}%, Grade ${topper.grade})</p>
         <p><strong>Class average %:</strong> ${classAvgPercent.toFixed(1)}%</p>
         <p><strong>Grade distribution:</strong></p>
         <ul>${gradeDistHtml}</ul>
@@ -241,7 +252,7 @@
         const marks = subjects.map(s => Number(stu.marks[s]) || 0);
         return [stu.name, ...marks, total.toFixed(0), percent.toFixed(1), g];
       });
-      const csv = [header, ...rows].map(r => r.join(",")).join("\n");
+      const csv = [header, ...rows].map(r => r.map(csvCell).join(",")).join("\n");
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
